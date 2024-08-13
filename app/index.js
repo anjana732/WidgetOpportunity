@@ -3,8 +3,9 @@ $(document).ready(function () {
         console.log("Initial Data:", data);
         EntityId = data.EntityId[0];
         console.log("Entity ID " + EntityId);
-
-
+        var dealName;
+        var closerDate;
+        var deliveryDate;
         //getting dropdown value
 
         $("#dropdown").on("change", function () {
@@ -27,60 +28,75 @@ $(document).ready(function () {
             Entity: "Accounts", approved: "both", RecordID: EntityId
         })
             .then(function (response) {
-                console.log("Account Detail"+JSON.stringify(response));
+                console.log("Account Detail" + JSON.stringify(response));
                 accountName = response.data[0].Account_Name;
                 $("#account-name").val(accountName).prop('disabled', true);
             })
             .catch(function (err) {
                 console.log("Error in getting Account name: " + err);
             })
-        
+
         //getting the data from form of add opportunity
 
         $("#add-opportunity").on("click", function () {
-            let closerDate = $("#closer-date").val();
-            let deliveryDate = $("#delivery-date").val();
-            let dealName = $("#deal-name").val();
+            closerDate = $("#closer-date").val();
+            deliveryDate = $("#delivery-date").val();
+            dealName = $("#deal-name").val();
             let stage = $("#stage").val();
-          //  let stageText = stage.find("option:selected").text();
+            //  let stageText = stage.find("option:selected").text();
 
             console.log("Order Colser Date: " + closerDate);
             console.log("Order Delivery Date :" + deliveryDate);
-            console.log("Deal Name : "+dealName);
-            console.log("Stage: "+stage);
+            console.log("Deal Name : " + dealName);
+            console.log("Stage: " + stage);
             if (deliveryDate > closerDate) {
                 alert("Closer date should be greater");
             }
             //Inserting the data to Account's Deal related List
 
-        var opportunityData = {
-            "Deal_Name": dealName,
-            "Account_Name" : EntityId,
-            "Stage": stage,
-            "Closing_Date" : closerDate,
-            "Order_Closer_Date" : closerDate,
-            "Order_Delivery_Date": deliveryDate
-        }
-        console.log("opportunityData:",opportunityData);
-        ZOHO.CRM.API.insertRecord({ Entity: "Deals", APIData: opportunityData,}).then(function (data) {
-            console.log("Data added "+ JSON.stringify(data));
-        }).catch((err)=>{
-            console.log("Error fetching data :"+err);
-        });
+            var opportunityData = {
+                "Deal_Name": dealName,
+                "Account_Name": EntityId,
+                "Stage": stage,
+                "Closing_Date": closerDate,
+                "Order_Closer_Date": closerDate,
+                "Order_Delivery_Date": deliveryDate
+            }
+            console.log("opportunityData:", opportunityData);
+            ZOHO.CRM.API.insertRecord({ Entity: "Deals", APIData: opportunityData, }).then(function (data) {
+                console.log("Data added " + JSON.stringify(data));
+             //   $("#model-body").modal('hide');
+             $("#modal-dialog").hide();
+
+                swal("Data Added Successfully!", "", "success");
+                refreshTable();
+
+            }).catch((err) => {
+                console.log("Error fetching data :" + err);
+                $("#modal-dialog").hide();
+                swal("Data not saved!")
+            });
+
+          
 
         })
         //getting all the opportunity using related List
+        // <td>${deal.Contact_Name ? deal.Contact_Name.name : 'N/A'}</td>
+       function refreshTable(){
         ZOHO.CRM.API.getRelatedRecords({ Entity: "Accounts", RecordID: EntityId, RelatedList: "Deals" })
             .then(function (dealData) {
-                console.log("All list from opportunity" + JSON.stringify(dealData));
+                //console.log("All list from opportunity" + JSON.stringify(dealData));
+                $("#opportunity-table tbody").empty(); 
                 console.log(dealData.data.Deal_Name);
                 dealData.data.forEach(deal => {
-                    let row = `<tr>
+                    console.log("Deal id is" + deal.id);
+                    let row = `<tr data-deal-id="${deal.id}" >
                         <td>${deal.Deal_Name || 'N/A'}</td>
                         <td>${deal.Stage || 'N/A'}</td>
-                        <td>${deal.Contact_Name ? deal.Contact_Name.name : 'N/A'}</td>
+                     
                         <td>${deal.Account_Name ? deal.Account_Name.name : 'N/A'}</td>
                         <td>
+
                             <select>
                                 <option value="Qualification" ${deal.Stage === 'Qualification' ? 'selected' : ''}>Qualification</option>
                                 <option value="Need Analysis" ${deal.Stage === 'Need Analysis' ? 'selected' : ''}>Need Analysis</option>
@@ -96,7 +112,56 @@ $(document).ready(function () {
                     </tr>`;
                     $("#opportunity-table tbody").append(row);
                 });
+               
             })
+       }
+       refreshTable();
+
+        /************************************ Updating Selected Rows *************************************/
+
+        $("#opportunity-table").on("click", "tr", function () {
+            $(this).toggleClass("selected");
+
+            let selectedRows = $("#opportunity-table tr.selected");
+
+            if (selectedRows.length > 0) {
+                $("#update-selected-rows-btn").show();
+            } else {
+                $("#update-selected-rows-btn").hide();
+            }
+        });
+
+        $("#update-selected-rows-btn").on("click", function () {
+            let selectedRows = $("#opportunity-table tr.selected");
+            console.log("Selected rows: ", JSON.stringify(selectedRows));
+            selectedRows.each(function () {
+                let dealId = $(this).data("deal-id");
+                let newStage = $(this).find("select").val();
+                console.log("Deal id inside update" + dealId);
+                console.log("New Deal Stage"+newStage);
+                ZOHO.CRM.API.updateRecord({
+                    Entity: "Deals",
+                    RecordID: dealId,
+                    APIData: {
+                        "id": dealId,
+                        "Deal_Name": dealName,
+                        "Account_Name": EntityId,
+                        "Stage": newStage,
+                        "Closing_Date": closerDate,
+                        "Order_Closer_Date": closerDate,
+                        "Order_Delivery_Date": deliveryDate
+                    }
+                }).then(function (response) {
+                    console.log("Updated deal ID " + dealId + " with stage " + newStage);
+                    swal("Data Updated Successfully!", "", "success");
+                    $(`#opportunity-table tr[data-deal-id='${dealId}']`).find("td:nth-child(2)").text(newStage);
+
+                }).catch(function (error) {
+                    console.error("Error updating deal ID " + dealId + ": " + error);
+                });
+            });
+        });
+
     });
     ZOHO.embeddedApp.init();
 });
